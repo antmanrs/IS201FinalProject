@@ -1,0 +1,92 @@
+/* Include: 1. At least four style defintions, 2. Styles that specify font color, 3. Styles that specifiy font family,
+ 4. At least 3 divs for positioning and styling blocks of content in the HTML page  */
+
+body {
+    color: white;
+    /* background-image:url(https://www.nasa.gov/wp-content/uploads/2023/03/iss061e110433.jpg) ; */
+    background-color: black;
+}
+
+.mydiv1 {
+    border: 5px outset lightgray;
+}
+.mydiv2 {
+    border-bottom: 3px outset rgb(255, 142, 142);
+    margin-bottom: 10px;
+}
+.mydiv3 {
+    background-color: #FFE81F;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    color: black;
+    text-align: center;
+    border: 5px outset lightgray;
+    padding: 20px; /* Added padding for spacing */
+    position: relative; /* Ensure it can contain other elements */
+    margin-bottom: 20px; /* Space below the div */
+}
+a:link {
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    color:#FFE81F;
+}
+a:hover {color: rgb(0, 251, 255);}
+
+.bottomr{
+    padding: 20px;
+    margin-top: 50px;
+}
+
+.rightimage {
+        float: right;
+        width: 250px;       /* Set a specific width for the image. Adjust as needed. */
+        height: auto;       /* Maintain aspect ratio */
+        margin-left: 20px;
+        border: 1px solid #ccc; /* Optional: for visualization */
+        z-index: 1;         
+}
+
+iframe {
+    float: right; /* Position independently of text flow */
+    width: 30%;
+    height: 60vh;
+    border: 5px solid lightgray;
+    margin-top: 20px;
+}
+
+li {
+    font-family:helvetica;
+    padding: 5px;
+}
+
+h1 {font-family: Verdana, Geneva, Tahoma, sans-serif;}
+
+.sfont {
+    font-family: verdana;
+    color: #FFE81F;
+    padding: 5px;
+}
+
+.sbfont {
+    font-family: verdana;
+    font-weight: bold;
+    font-size: medium;
+    color: #FFE81F;
+    padding: 5px;
+    text-decoration:underline;
+}
+
+.leftmenu{
+    top: 114px;
+    left: 5px;
+    width: 100px;
+    bottom: 39px;
+    z-index: 1;
+    padding-top: 40px;
+    border-right: solid 1px white;
+}
+.tableauPlaceholder {
+    height: 600px;
+    width: 100%;
+    margin-top: 20px;
+    overflow: visible;
+    border: 5px outset lightgrey;
+}

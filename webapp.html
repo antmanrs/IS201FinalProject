@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Wars Space Battle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            /* background-color: #000; */
+            background-image: url(Images/Images/spaceclonewars.png);
+            color: #fff;
+            margin: 0;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        /* rgb(0, 247, 255) */
+        .game-container {
+            border: 3px solid rgba(0, 247, 255, 0.571); /* Green border */
+            position: relative; /* For positioning game over screen */
+            background-color: #111; /* Darker background for canvas area */
+            box-shadow: 0 0 20px rgb(0, 247, 255);
+            display: flex;  
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        canvas {
+            display: block;
+            background-color: #000; /* Black game area */
+            border-radius: 5px;
+            /* Make canvas responsive but maintain aspect ratio */
+            max-width: 100%;
+            height: auto;
+        }
+
+        .ui {
+            display: flex;
+            justify-content: space-between;
+            width: 100%; /* Match canvas width if possible, adjust as needed */
+            max-width: 600px; /* Max width for UI */
+            padding: 10px 0;
+            font-size: 14px; /* Slightly smaller font for more info */
+            color: rgb(255, 255, 255); /* Green text */
+            flex-wrap: wrap; /* Allow wrapping if space is tight */
+        }
+         .ui span {
+             padding: 0 10px; /* Add some spacing between UI elements */
+         }
+
+        #game-over-screen {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); /* Semi-transparent black */
+            color: #f00; /* Red text */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 24px;
+            border-radius: 10px; /* Match container */
+            /* Ensure it appears above the canvas */
+            z-index: 10;
+        }
+
+        #game-over-screen h2 {
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #f00;
+        }
+
+        #play-again-button {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-family: 'Press Start 2P', cursive;
+            color: #000;
+            background-color: rgb(0, 247, 255); /* Blue button */
+            border: 2px solid #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: background-color 0.3s, box-shadow 0.3s;
+            box-shadow: 0 0 10px rgb(0, 247, 255);
+        }
+
+        #play-again-button:hover {
+            background-color: #fff;
+            color: #000;
+            box-shadow: 0 0 15px #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="ui">
+            <span id="score">Score: 0</span>
+            <span id="wave">Wave: 1</span> <span id="lives">Lives: 3</span>
+        </div>
+        <canvas id="gameCanvas" width="700" height="500"></canvas>
+        <div id="game-over-screen">
+            <h2>Battle Lost</h2>
+            <button id="play-again-button">Deploy</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const waveElement = document.getElementById('wave'); // Get wave element
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const playAgainButton = document.getElementById('play-again-button');
+
+        // --- Base Game Constants ---
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 20;
+        const PLAYER_SPEED = 5;
+        const PROJECTILE_WIDTH = 5;
+        const PROJECTILE_HEIGHT = 10;
+        const PLAYER_PROJECTILE_SPEED = 7; // Player projectile speed remains constant
+        const ENEMY_WIDTH = 30;
+        const ENEMY_HEIGHT = 20;
+        const ENEMY_PADDING = 15;
+        const ENEMY_OFFSET_TOP = 30;
+        const ENEMY_SPEED_X = 1; // Base horizontal speed
+        const ENEMY_SPEED_Y = 20; // How much enemies drop down
+
+        // --- Difficulty Scaling Constants ---
+        const BASE_ENEMY_PROJECTILE_SPEED = 2;
+        const MAX_ENEMY_PROJECTILE_SPEED = 6;
+        const ENEMY_PROJECTILE_SPEED_INCREMENT = 0.2;
+        const BASE_ENEMY_SHOOT_PROBABILITY = 0.004;
+        const MAX_ENEMY_SHOOT_PROBABILITY = 0.02;
+        const ENEMY_SHOOT_PROBABILITY_INCREMENT = 0.0005;
+        const BASE_MAX_PLAYER_PROJECTILES = 3;
+        const MAX_PLAYER_PROJECTILES_CAP = 8;
+        const WAVES_PER_PLAYER_PROJECTILE_INCREASE = 3;
+        const BASE_ENEMY_COLS = 6;
+        const MAX_ENEMY_COLS = 12;
+        const WAVES_PER_ENEMY_COL_INCREASE = 2;
+        const BASE_ENEMY_ROWS = 3;
+
+        // --- Game State Variables ---
+        let player;
+        let projectiles;
+        let enemies;
+        let enemyProjectiles;
+        let score;
+        let lives;
+        let currentWave;
+        let keys = {};
+        let enemyDirection = 1;
+        let gameOver = false;
+        let animationFrameId;
+
+        // --- Wave-Dependent Variables ---
+        let currentEnemyProjectileSpeed;
+        let currentEnemyShootProbability;
+        let maxPlayerProjectiles;
+        let currentEnemyCols;
+        let currentEnemyRows;
+        let currentEnemyOffsetLeft;
+
+        // --- Explosion State Variables ---
+        let isExploding = false;
+        let explosionX, explosionY;
+        let explosionRadius;
+        const EXPLOSION_MAX_RADIUS = 60;
+        const EXPLOSION_DURATION = 400;
+        let explosionStartTime;
+        let explosionAnimationFrameId;
+
+        // --- Player Class ---
+        class Player {
+            constructor(x, y, width, height, speed) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.speed = speed;
+            }
+
+            draw() {
+                if (!isExploding) {
+                    // --- NEW: Draw Player Ship Shape ---
+                    ctx.fillStyle = 'rgb(0, 247, 255)'; // Green color
+                    ctx.beginPath();
+                    // Simple upward-pointing triangle (Clone Trooper Ship style)
+                    ctx.moveTo(this.x + this.width / 2, this.y); // Top center point
+                    ctx.lineTo(this.x, this.y + this.height); // Bottom left corner
+                    ctx.lineTo(this.x + this.width, this.y + this.height); // Bottom right corner
+                    ctx.closePath();
+                    ctx.fill();
+                    // --- END NEW ---
+                }
+            }
+
+            move() {
+                if (gameOver) return;
+                if (keys['ArrowLeft'] && this.x > 0) {
+                    this.x -= this.speed;
+                }
+                if (keys['ArrowRight'] && this.x < canvas.width - this.width) {
+                    this.x += this.speed;
+                }
+            }
+
+            shoot() {
+                 if (gameOver) return;
+                if (projectiles.length < maxPlayerProjectiles) {
+                    const projectileX = this.x + this.width / 2 - PROJECTILE_WIDTH / 2;
+                    const projectileY = this.y;
+                    projectiles.push(new Projectile(projectileX, projectileY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT, PLAYER_PROJECTILE_SPEED, 'rgb(0, 247, 255)'));
+                }
+            }
+        }
+
+        // --- Projectile Class ---
+        class Projectile {
+            constructor(x, y, width, height, speed, color) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.speed = speed;
+                this.color = color;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.y -= this.speed;
+            }
+        }
+
+        // --- Enemy Projectile Class ---
+        class EnemyProjectile extends Projectile {
+            constructor(x, y, width, height, speed, color) {
+                super(x, y, width, height, speed, color);
+            }
+             update() {
+                this.y += this.speed;
+            }
+        }
+
+
+        // --- Enemy Class ---
+        class Enemy {
+             constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.active = true;
+            }
+
+            draw() {
+                if (this.active) {
+                    // --- NEW: Draw Enemy Ship Shape ---
+                    ctx.fillStyle = '#f00'; // Red color
+                    ctx.beginPath();
+
+                    // Central body (rectangle)
+                    const bodyWidth = this.width * 0.4;
+                    const bodyHeight = this.height * 0.6;
+                    const bodyX = this.x + (this.width - bodyWidth) / 2;
+                    const bodyY = this.y + (this.height - bodyHeight) / 2;
+                    ctx.rect(bodyX, bodyY, bodyWidth, bodyHeight);
+
+                    // Wings (triangles pointing outwards/downwards - CIS Droid Ship style)
+                    // Left Wing
+                    ctx.moveTo(bodyX, bodyY); // Top-left of body
+                    ctx.lineTo(this.x, this.y + this.height); // Outer bottom-left point
+                    ctx.lineTo(bodyX, bodyY + bodyHeight); // Bottom-left of body
+                    // Right Wing
+                    ctx.moveTo(bodyX + bodyWidth, bodyY); // Top-right of body
+                    ctx.lineTo(this.x + this.width, this.y + this.height); // Outer bottom-right point
+                    ctx.lineTo(bodyX + bodyWidth, bodyY + bodyHeight); // Bottom-right of body
+
+                    // Close paths implicitly handled by fill, but good practice:
+                    // ctx.closePath(); // Not strictly needed here as fill closes subpaths
+
+                    ctx.fill(); // Fill the combined shape (body + wings)
+                    // --- END NEW ---
+                }
+            }
+
+            move(dx, dy) {
+                this.x += dx;
+                this.y += dy;
+            }
+
+            shoot() {
+                 if (this.active && !gameOver && Math.random() < currentEnemyShootProbability) {
+                    const projectileX = this.x + this.width / 2 - PROJECTILE_WIDTH / 2;
+                    const projectileY = this.y + this.height; // Shoot from bottom center
+                    enemyProjectiles.push(new EnemyProjectile(projectileX, projectileY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT, currentEnemyProjectileSpeed, 'red'));
+                 }
+            }
+        }
+
+        // --- Game Functions ---
+
+        function initEnemies(cols, rows, offsetLeft) {
+            enemies = [];
+            for (let c = 0; c < cols; c++) {
+                for (let r = 0; r < rows; r++) {
+                    const enemyX = offsetLeft + c * (ENEMY_WIDTH + ENEMY_PADDING);
+                    const enemyY = ENEMY_OFFSET_TOP + r * (ENEMY_HEIGHT + ENEMY_PADDING);
+                    enemies.push(new Enemy(enemyX, enemyY, ENEMY_WIDTH, ENEMY_HEIGHT));
+                }
+            }
+        }
+
+        function updateEnemies() {
+            if (gameOver) return;
+
+            let moveDown = false;
+            let changeDirection = false;
+
+            for (const enemy of enemies) {
+                if (enemy.active) {
+                    if (enemy.x + ENEMY_WIDTH >= canvas.width && enemyDirection === 1) {
+                        changeDirection = true;
+                        moveDown = true;
+                        break;
+                    }
+                    if (enemy.x <= 0 && enemyDirection === -1) {
+                        changeDirection = true;
+                        moveDown = true;
+                        break;
+                    }
+                }
+            }
+
+            if (changeDirection) {
+                enemyDirection *= -1;
+            }
+
+            const currentEnemySpeedX = ENEMY_SPEED_X;
+            const moveX = changeDirection ? 0 : currentEnemySpeedX * enemyDirection;
+            const moveY = moveDown ? ENEMY_SPEED_Y : 0;
+
+            for (const enemy of enemies) {
+                 if (enemy.active) {
+                    enemy.move(moveX, moveY);
+                    enemy.shoot();
+
+                    if (
+                        !isExploding &&
+                        enemy.y + enemy.height >= player.y &&
+                        enemy.y <= player.y + player.height &&
+                        enemy.x + enemy.width >= player.x &&
+                        enemy.x <= player.x + player.width
+                    ) {
+                        loseLife();
+                        if (gameOver) return;
+                    }
+
+                     if (enemy.y + enemy.height >= canvas.height) {
+                        triggerGameOverSequence(player.x + player.width / 2, player.y + player.height / 2);
+                        return;
+                     }
+                 }
+            }
+        }
+
+
+        function updateProjectiles() {
+             // Player projectiles
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.update();
+
+                if (p.y + p.height < 0) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    // Use checkCollision which relies on the bounding box (width/height)
+                    if (enemy.active && checkCollision(p, enemy)) {
+                        enemy.active = false;
+                        projectiles.splice(i, 1);
+                        score += 10 * currentWave;
+                        updateUI();
+                        break;
+                    }
+                }
+            }
+
+             // Enemy projectiles
+            for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+                const ep = enemyProjectiles[i];
+                ep.update();
+
+                if (ep.y > canvas.height) {
+                    enemyProjectiles.splice(i, 1);
+                    continue;
+                }
+                 // Use checkCollision which relies on the bounding box (width/height)
+                if (!isExploding && checkCollision(ep, player)) {
+                    enemyProjectiles.splice(i, 1);
+                    loseLife();
+                    if (gameOver) return;
+                }
+            }
+        }
+
+        // Collision detection still uses the rectangular bounding box
+        function checkCollision(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        function loseLife() {
+             if (isExploding || gameOver) return;
+            lives--;
+            updateUI();
+            if (lives <= 0) {
+                triggerGameOverSequence(player.x + player.width / 2, player.y + player.height / 2);
+            }
+        }
+
+        function triggerGameOverSequence(px, py) {
+            if (gameOver) return;
+            console.log("Triggering Game Over Sequence...");
+            gameOver = true;
+            cancelAnimationFrame(animationFrameId);
+            explosionX = px;
+            explosionY = py;
+            isExploding = true;
+            explosionRadius = 5;
+            explosionStartTime = performance.now();
+            if (explosionAnimationFrameId) cancelAnimationFrame(explosionAnimationFrameId);
+            explosionAnimationFrameId = requestAnimationFrame(explosionAnimationLoop);
+        }
+
+        function explosionAnimationLoop(currentTime) {
+            const elapsedTime = currentTime - explosionStartTime;
+            if (elapsedTime >= EXPLOSION_DURATION) {
+                isExploding = false;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                gameOverScreen.style.display = 'flex';
+                console.log("Game Over!");
+                return;
+            }
+            explosionRadius = 5 + (EXPLOSION_MAX_RADIUS - 5) * (elapsedTime / EXPLOSION_DURATION);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.arc(explosionX, explosionY, explosionRadius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 165, 0, 0.8)';
+            ctx.fill();
+            const innerRadius = explosionRadius * 0.6;
+             if (innerRadius > 0) {
+                ctx.beginPath();
+                ctx.arc(explosionX, explosionY, innerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+                ctx.fill();
+             }
+            explosionAnimationFrameId = requestAnimationFrame(explosionAnimationLoop);
+        }
+
+
+        function updateUI() {
+            scoreElement.textContent = `Score: ${score}`;
+            livesElement.textContent = `Lives: ${lives}`;
+            waveElement.textContent = `Wave: ${currentWave}`;
+        }
+
+        function draw() {
+             if (!isExploding) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+             } else {
+                 return;
+             }
+            player.draw(); // Calls the new draw method
+            projectiles.forEach(p => p.draw());
+            enemies.forEach(e => e.draw()); // Calls the new draw method
+            enemyProjectiles.forEach(ep => ep.draw());
+        }
+
+        function gameLoop() {
+             if (gameOver) {
+                 if (!isExploding) cancelAnimationFrame(animationFrameId);
+                 return;
+             }
+            player.move();
+            updateProjectiles();
+            updateEnemies();
+            const activeEnemies = enemies.filter(e => e.active).length;
+            if (activeEnemies === 0 && !gameOver) {
+                currentWave++;
+                console.log(`Starting Wave: ${currentWave}`);
+                resetGameComponents(false);
+                updateUI();
+            }
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            keys[e.key] = true;
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                 player.shoot();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        playAgainButton.addEventListener('click', () => {
+            resetGame(true);
+        });
+
+        // --- Game Initialization and Reset ---
+        function resetGameComponents(fullReset) {
+            currentEnemyProjectileSpeed = Math.min(BASE_ENEMY_PROJECTILE_SPEED + (currentWave - 1) * ENEMY_PROJECTILE_SPEED_INCREMENT, MAX_ENEMY_PROJECTILE_SPEED);
+            currentEnemyShootProbability = Math.min(BASE_ENEMY_SHOOT_PROBABILITY + (currentWave - 1) * ENEMY_SHOOT_PROBABILITY_INCREMENT, MAX_ENEMY_SHOOT_PROBABILITY);
+            maxPlayerProjectiles = Math.min(BASE_MAX_PLAYER_PROJECTILES + Math.floor((currentWave - 1) / WAVES_PER_PLAYER_PROJECTILE_INCREASE), MAX_PLAYER_PROJECTILES_CAP);
+            currentEnemyCols = Math.min(BASE_ENEMY_COLS + Math.floor((currentWave - 1) / WAVES_PER_ENEMY_COL_INCREASE), MAX_ENEMY_COLS);
+            currentEnemyRows = BASE_ENEMY_ROWS;
+            const totalEnemyWidth = currentEnemyCols * ENEMY_WIDTH + (currentEnemyCols - 1) * ENEMY_PADDING;
+            currentEnemyOffsetLeft = Math.max(10, (canvas.width - totalEnemyWidth) / 2);
+
+            console.log(`Wave ${currentWave} Params: Enemy Speed=${currentEnemyProjectileSpeed.toFixed(2)}, Shoot Prob=${currentEnemyShootProbability.toFixed(4)}, Player Max Shots=${maxPlayerProjectiles}, Enemy Cols=${currentEnemyCols}`);
+
+            player = new Player(
+                canvas.width / 2 - PLAYER_WIDTH / 2,
+                canvas.height - PLAYER_HEIGHT - 10,
+                PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_SPEED
+            );
+            projectiles = [];
+            enemyProjectiles = [];
+            initEnemies(currentEnemyCols, currentEnemyRows, currentEnemyOffsetLeft);
+            enemyDirection = 1;
+
+             if (fullReset) {
+                score = 0;
+                lives = 3;
+                currentWave = 1;
+                 currentEnemyProjectileSpeed = BASE_ENEMY_PROJECTILE_SPEED;
+                 currentEnemyShootProbability = BASE_ENEMY_SHOOT_PROBABILITY;
+                 maxPlayerProjectiles = BASE_MAX_PLAYER_PROJECTILES;
+                 currentEnemyCols = BASE_ENEMY_COLS;
+                 const firstWaveTotalWidth = currentEnemyCols * ENEMY_WIDTH + (currentEnemyCols - 1) * ENEMY_PADDING;
+                 currentEnemyOffsetLeft = Math.max(10, (canvas.width - firstWaveTotalWidth) / 2);
+                 initEnemies(currentEnemyCols, currentEnemyRows, currentEnemyOffsetLeft);
+             }
+        }
+
+        function resetGame(fullReset) {
+            console.log("Resetting game...");
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (explosionAnimationFrameId) cancelAnimationFrame(explosionAnimationFrameId);
+            gameOver = false;
+            isExploding = false;
+            keys = {};
+            if (fullReset) {
+                currentWave = 1;
+            }
+            resetGameComponents(fullReset);
+            updateUI();
+            gameOverScreen.style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Start the game ---
+        window.onload = function() {
+            console.log("Window loaded. Starting game...");
+            resetGame(true);
+        };
+
+    </script>
+</body>
+</html>
+
